@@ -154,7 +154,6 @@ async function createPDF(content, pageTitle, pageUrl) {
         doc.setFontSize(8);
         doc.setTextColor(30, 30, 30);
 
-        // Light gray background
         const codeIndent = marginLeft + 3;
         const codeWidth = maxWidth - 6;
         const lines = doc.splitTextToSize(item.text, codeWidth);
@@ -164,10 +163,32 @@ async function createPDF(content, pageTitle, pageUrl) {
             doc.addPage();
             y = marginTop;
           }
-          // Background rect for each line
           doc.setFillColor(245, 245, 245);
           doc.rect(marginLeft, y - 3, maxWidth, 5, 'F');
           doc.text(line, codeIndent, y);
+          y += 4.5;
+        }
+        doc.setTextColor(0, 0, 0);
+        y += 3;
+        break;
+      }
+
+      case 'table': {
+        doc.setFont('courier', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(20, 20, 20);
+
+        const tableLines = item.text.split('\n');
+        for (let ti = 0; ti < tableLines.length; ti++) {
+          if (y + 5 > pageHeight - marginBottom) {
+            doc.addPage();
+            y = marginTop;
+          }
+          const bgColor = ti === 0 ? [220, 230, 245] : (ti % 2 === 0 ? [248, 248, 248] : [255, 255, 255]);
+          doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
+          doc.rect(marginLeft, y - 3, maxWidth, 5, 'F');
+          const truncated = tableLines[ti].substring(0, 200);
+          doc.text(truncated, marginLeft + 2, y);
           y += 4.5;
         }
         doc.setTextColor(0, 0, 0);
