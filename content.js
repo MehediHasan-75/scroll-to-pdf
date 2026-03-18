@@ -197,7 +197,7 @@
     const noiseSelector = '[' + NOISE_ATTR + '="true"]';
 
     const elements = root.querySelectorAll(
-      'h1, h2, h3, h4, h5, h6, p, pre, li, blockquote, figcaption, dt, dd, table'
+      'h1, h2, h3, h4, h5, h6, p, pre, li, blockquote, figcaption, dt, dd, table, img'
     );
 
     for (let i = 0; i < elements.length; i++) {
@@ -231,6 +231,19 @@
       }
 
       if (el.closest('pre')) continue;
+
+      if (tag === 'IMG') {
+        const src = el.src || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || '';
+        if (!src || src.startsWith('data:image/svg') || src.length < 5) continue;
+        if (el.naturalWidth < 50 || el.naturalHeight < 50) continue;
+        if (el.closest(noiseSelector)) continue;
+        const alt = (el.alt || '').trim();
+        if (!seen.has(src)) {
+          seen.add(src);
+          items.push({ type: 'image', src, alt, width: el.naturalWidth, height: el.naturalHeight });
+        }
+        continue;
+      }
 
       if (tag === 'TABLE') {
         const md = tableToMarkdown(el);

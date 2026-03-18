@@ -6,6 +6,30 @@ chrome.runtime.onMessage.addListener((request) => {
   }
 });
 
+async function fetchImageAsBase64(src) {
+  try {
+    const response = await fetch(src, { mode: 'cors' });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    if (!blob.type.startsWith('image/')) return null;
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve({ data: reader.result, type: blob.type });
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function getImageFormat(mimeType) {
+  if (mimeType.includes('png')) return 'PNG';
+  if (mimeType.includes('webp')) return 'WEBP';
+  if (mimeType.includes('gif')) return 'GIF';
+  return 'JPEG';
+}
+
 async function createPDF(content, pageTitle, pageUrl) {
   const { jspdf } = window;
 
@@ -23,6 +47,19 @@ async function createPDF(content, pageTitle, pageUrl) {
   const marginBottom = 20;
   const maxWidth = pageWidth - marginLeft - marginRight;
   let y = marginTop;
+
+  // Pre-fetch all images in parallel
+  const imageItems = content.filter(item => item.type === 'image');
+  const imageCache = new Map();
+  if (imageItems.length > 0) {
+    chrome.runtime.sendMessage({ action: 'UPDATE_STATUS', message: `Fetching ${imageItems.length} images...` });
+    const results = await Promise.allSettled(
+      imageItems.map(async (item) => {
+        const result = await fetchImageAsBase64(item.src);
+        if (result) imageCache.set(item.src, result);
+      })
+    );
+  }
 
   // Title
   doc.setFont('helvetica', 'bold');
@@ -170,6 +207,52 @@ async function createPDF(content, pageTitle, pageUrl) {
         }
         doc.setTextColor(0, 0, 0);
         y += 3;
+        break;
+      }
+
+      case 'image': {
+        const imgData = imageCache.get(item.src);
+        if (imgData) {
+          const format = getImageFormat(imgData.type);
+          // Scale image to fit within maxWidth, preserving aspect ratio
+          const aspectRatio = item.height / item.width;
+          let imgWidthMm = Math.min(maxWidth, item.width * 0.264583); // px to mm
+          let imgHeightMm = imgWidthMm * aspectRatio;
+          // Cap height to available page space
+          const maxImgHeight = pageHeight - marginTop - marginBottom - 10;
+          if (imgHeightMm > maxImgHeight) {
+            imgHeightMm = maxImgHeight;
+            imgWidthMm = imgHeightMm / aspectRatio;
+          }
+          // New page if image doesn't fit
+          if (y + imgHeightMm + 2 > pageHeight - marginBottom) {
+            doc.addPage();
+            y = marginTop;
+          }
+          try {
+            doc.addImage(imgData.data, format, marginLeft, y, imgWidthMm, imgHeightMm);
+            y += imgHeightMm + 2;
+          } catch (e) {
+            // Skip images that jsPDF can't handle
+          }
+          // Add alt text caption if present
+          if (item.alt) {
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
+            if (y + 5 > pageHeight - marginBottom) {
+              doc.addPage();
+              y = marginTop;
+            }
+            const altLines = doc.splitTextToSize(item.alt, maxWidth);
+            for (const line of altLines) {
+              doc.text(line, marginLeft, y);
+              y += 4;
+            }
+            doc.setTextColor(0, 0, 0);
+          }
+          y += 3;
+        }
         break;
       }
 
