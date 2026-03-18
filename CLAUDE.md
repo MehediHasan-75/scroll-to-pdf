@@ -22,6 +22,10 @@ The production extension uses four isolated execution contexts communicating via
 3. **Service Worker** (`background.js`) — Stateless message router. Executes `chrome.tabs.captureVisibleTab` for native rasterization (CORS-immune, pixel-perfect), manages Offscreen Document lifecycle.
 4. **Offscreen Document** (`offscreen/offscreen.js`) — Hidden DOM context for jsPDF. Receives Base64 image chunks, applies `devicePixelRatio` scaling, compiles multi-page PDF, triggers `chrome.downloads.download`.
 
+## Image Support
+
+The content script extracts `<img>` elements (including lazy-loaded images via `data-src`/`data-lazy-src`) alongside text content. Images smaller than 50x50px and SVG data URIs are filtered out. The offscreen document fetches all images in parallel via `fetch` → `FileReader` → Base64, then embeds them into the PDF using `jsPDF.addImage()`. Images are scaled to fit page width while preserving aspect ratio, capped to single-page height. Alt text is rendered as italic captions below each image. Supported formats: JPEG, PNG, WebP, GIF.
+
 ## Key Technical Constraints
 
 - **MV3 Service Workers have no DOM** — all canvas/Blob/jsPDF work must go through the Offscreen Document API.
